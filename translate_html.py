@@ -243,8 +243,7 @@ def find_html_files(directory='.', exclude_patterns=None):
     """Find all HTML files in the given directory, excluding specific patterns"""
     if exclude_patterns is None:
         # Default exclusion patterns - add your injection file names here
-        exclude_patterns = [
-            r'head\.html
+        exclude_patterns = [r'head\.html$', r'body\.html$', r'injection\.html$', r'template\.html$', r'-(?:fr|es|de)\.html$']
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Translate HTML files.")
