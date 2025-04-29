@@ -1,0 +1,101 @@
+name: Translate HTML
+
+on:
+  workflow_dispatch:
+    inputs:
+      lang:
+        description: 'Target language (e.g., fr, es, de)'
+        required: true
+        default: 'fr'
+      force:
+        description: 'Force overwrite existing translations'
+        required: false
+        type: boolean
+        default: false
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
+      exclude:
+        description: 'Files to exclude from translation (comma-separated)'
+        required: false
+        default: 'head.html,body.html,template.html,injection.html'
+      include:
+        description: 'Only translate these specific files (comma-separated)'
+        required: false
+        default: ''
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Added for write permissions
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install beautifulsoup4 requests
+          # Install OpenAI only if API key is provided
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            pip install openai
+          fi
+
+      - name: List HTML files to translate
+        run: |
+          find . -type f -name "*.html" | grep -v "\-\(fr\|es\|de\)\.html$"
+
+      - name: Run translation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
+        run: |
+          FORCE_FLAG=""
+          DEBUG_FLAG=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          if [ "${{ github.event.inputs.debug }}" = "true" ]; then
+            DEBUG_FLAG="--debug"
+          fi
+          
+          # Set exclusion and inclusion flags
+          EXCLUDE_FLAG=""
+          if [ -n "${{ github.event.inputs.exclude }}" ]; then
+            EXCLUDE_FLAG="--exclude ${{ github.event.inputs.exclude }}"
+          fi
+          
+          INCLUDE_FLAG=""
+          if [ -n "${{ github.event.inputs.include }}" ]; then
+            INCLUDE_FLAG="--include ${{ github.event.inputs.include }}"
+          fi
+          
+          # Ensure the script has execution permissions
+          if [ -f "improved_translate_html.py" ]; then
+            python improved_translate_html.py --lang "${{ github.event.inputs.lang }}" $FORCE_FLAG $DEBUG_FLAG $EXCLUDE_FLAG $INCLUDE_FLAG
+          else
+            python translate_html.py --lang "${{ github.event.inputs.lang }}" $FORCE_FLAG $DEBUG_FLAG
+          fi
+
+      - name: List generated files
+        run: |
+          echo "Generated translation files:"
+          find . -type f -name "*-${{ github.event.inputs.lang }}.html"
+
+      - name: Commit translated files
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add "*-${{ github.event.inputs.lang }}.html" translation_db.json
+          # Add commit check to prevent empty commits
+          git status
+          git diff --cached --quiet || git commit -m "Translated HTML to ${{ github.event.inputs.lang }}"
+          git push
